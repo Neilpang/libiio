@@ -48,6 +48,15 @@ static int dev_is_buffer_capable(const struct iio_device *dev)
 
 #define MY_OPTS ""
 
+static void print_error(struct iio_context *ctx, int err)
+{
+	char buf[1024];
+
+	iio_strerror(-err, buf, sizeof(buf));
+
+	printf("value: ERROR: %s\n", buf);
+}
+
 int main(int argc, char **argv)
 {
 	char **argw, *buf;
@@ -204,13 +213,14 @@ int main(int argc, char **argv)
 				attr = iio_channel_get_attr(ch, k);
 				ret = (int) iio_attr_read_raw(attr, buf, BUF_SIZE);
 
-				printf("\t\t\t\tattr %2u: %s ", k,
-				       iio_attr_get_name(attr));
+				printf("\t\t\t\tattr %2u: %s (%s) ", k,
+				       iio_attr_get_name(attr),
+				       iio_attr_get_filename(attr));
 
 				if (ret > 0)
 					printf("value: %s\n", buf);
 				else
-					ctx_perror(ctx, ret, "");
+					print_error(ctx, ret);
 			}
 		}
 
@@ -227,7 +237,7 @@ int main(int argc, char **argv)
 				if (ret > 0)
 					printf("value: %s\n", buf);
 				else
-					ctx_perror(ctx, ret, "");
+					print_error(ctx, ret);
 			}
 		}
 
@@ -246,7 +256,7 @@ int main(int argc, char **argv)
 				if (ret > 0)
 					printf("Value: %s\n", buf);
 				else
-					ctx_perror(ctx, ret, "");
+					print_error(ctx, ret);
 			}
 
 			iio_buffer_destroy(buffer);
@@ -264,7 +274,7 @@ int main(int argc, char **argv)
 				if (ret > 0)
 					printf("value: %s\n", buf);
 				else
-					ctx_perror(ctx, ret, "");
+					print_error(ctx, ret);
 			}
 		}
 
