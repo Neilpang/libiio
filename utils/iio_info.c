@@ -14,12 +14,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* For isatty() */
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "iio_common.h"
 
 #define MY_NAME "iio_info"
 
 #ifdef _WIN32
 #define snprintf sprintf_s
+#define isatty _isatty
 #endif
 
 static const struct option options[] = {
@@ -48,13 +56,23 @@ static int dev_is_buffer_capable(const struct iio_device *dev)
 
 #define MY_OPTS ""
 
+static bool colors;
+
+#define FMT_ERR "\e[1;31mERROR: %s\e[0m"
+#define FMT_DEV "\e[1;32m%s\e[0m"
+#define FMT_CHN "\e[0;33m%s\e[0m"
+#define FMT_ATTR "\e[1;34m%s\e[0m"
+
 static void print_error(struct iio_context *ctx, int err)
 {
 	char buf[1024];
 
-	iio_strerror(-err, buf, sizeof(buf));
+	iio_strerror(err, buf, sizeof(buf));
 
-	printf("value: ERROR: %s\n", buf);
+	if (colors)
+		printf("value: " FMT_ERR "\n", buf);
+	else
+		printf("value: ERROR: %s\n", buf);
 }
 
 int main(int argc, char **argv)
@@ -72,6 +90,10 @@ int main(int argc, char **argv)
 	struct iio_buffer *buffer;
 	struct option *opts;
 	int c, ret = EXIT_FAILURE;
+
+#ifndef _MSC_BUILD
+	colors = isatty(STDOUT_FILENO) == 1;
+#endif
 
 	argw = dup_argv(MY_NAME, argc, argv);
 
@@ -134,7 +156,10 @@ int main(int argc, char **argv)
 		key = iio_attr_get_name(attr);
 		value = iio_attr_get_static_value(attr);
 
-		printf("\t%s: %s\n", key, value);
+		if (colors)
+			printf("\t" FMT_ATTR ": %s\n", key, value);
+		else
+			printf("\t%s: %s\n", key, value);
 	}
 
 	nb_devices = iio_context_get_devices_count(ctx);
@@ -146,9 +171,16 @@ int main(int argc, char **argv)
 		name = iio_device_get_name(dev);
 		label = iio_device_get_label(dev);
 
-		printf("\t%s:", iio_device_get_id(dev));
-		if (name)
-			printf(" %s", name);
+		if (colors)
+			printf("\t" FMT_DEV ":", iio_device_get_id(dev));
+		else
+			printf("\t%s:", iio_device_get_id(dev));
+		if (name) {
+			if (colors)
+				printf(" " FMT_DEV, name);
+			else
+				printf(" %s", name);
+		}
 		if (label)
 			printf(" (label: %s)", label);
 		if (dev_is_buffer_capable(dev))
@@ -171,13 +203,25 @@ int main(int argc, char **argv)
 			else
 				type_name = "input";
 
-			name = iio_channel_get_name(ch);
-			printf("\t\t\t%s: %s (%s",
-					iio_channel_get_id(ch),
-					name ? name : "", type_name);
+			printf("\t\t\t");
 
-			if (iio_channel_get_type(ch) == IIO_CHAN_TYPE_UNKNOWN)
-				printf(", WARN:iio_channel_get_type()=UNKNOWN");
+			name = iio_channel_get_name(ch);
+			if (colors) {
+				printf(FMT_CHN ": " FMT_CHN " (" FMT_CHN,
+				       iio_channel_get_id(ch),
+				       name ? name : "", type_name);
+			} else {
+				printf("%s: %s (%s",
+				       iio_channel_get_id(ch),
+				       name ? name : "", type_name);
+			}
+
+			if (iio_channel_get_type(ch) == IIO_CHAN_TYPE_UNKNOWN) {
+				if (colors)
+					printf(", " FMT_ERR, "iio_channel_get_type() = UNKNOWN");
+				else
+					printf(", ERROR: iio_channel_get_type() = UNKNOWN");
+			}
 
 			if (iio_channel_is_scan_element(ch)) {
 				format = iio_channel_get_data_format(ch);
@@ -213,9 +257,14 @@ int main(int argc, char **argv)
 				attr = iio_channel_get_attr(ch, k);
 				ret = (int) iio_attr_read_raw(attr, buf, BUF_SIZE);
 
-				printf("\t\t\t\tattr %2u: %s (%s) ", k,
-				       iio_attr_get_name(attr),
-				       iio_attr_get_filename(attr));
+				printf("\t\t\t\tattr %2u: ", k);
+
+				if (colors)
+					printf(FMT_ATTR, iio_attr_get_name(attr));
+				else
+					printf("%s", iio_attr_get_name(attr));
+
+				printf(" (%s) ", iio_attr_get_filename(attr));
 
 				if (ret > 0)
 					printf("value: %s\n", buf);
@@ -232,8 +281,11 @@ int main(int argc, char **argv)
 				attr = iio_device_get_attr(dev, j);
 				ret = (int) iio_attr_read_raw(attr, buf, BUF_SIZE);
 
-				printf("\t\t\t\tattr %2u: %s ",
-				       j, iio_attr_get_name(attr));
+				printf("\t\t\t\tattr %2u: ", j);
+				if (colors)
+					printf(FMT_ATTR " ", iio_attr_get_name(attr));
+				else
+					printf("%s ", iio_attr_get_name(attr));
 				if (ret > 0)
 					printf("value: %s\n", buf);
 				else
